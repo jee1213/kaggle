@@ -1,0 +1,286 @@
+import csv
+import pandas as pd
+import numpy as np
+
+import seaborn as sns
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC, SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.linear_model import Perceptron
+from sklearn.linear_model import SGDClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.decomposition import PCA
+from sklearn import preprocessing 
+# Pid, Pclass, Name, Sex, Age, SibSp, Parch, Ticket, Fare, Cabin, Embarked? 
+train = pd.read_csv('train.csv')
+test = pd.read_csv('test.csv')
+combine = [train,test]
+print train[['Pclass','Survived']].groupby(['Pclass'],as_index=False).mean().sort_values(by='Survived',ascending=False)
+print '\n'
+print train[['Sex','Survived']].groupby(['Sex'],as_index=False).mean().sort_values(by='Survived',ascending=False)
+print '\n'
+print train[['SibSp','Survived']].groupby(['SibSp'],as_index=False).mean().sort_values(by='Survived',ascending=False)
+print '\n'
+print train[['Parch','Survived']].groupby(['Parch'],as_index=False).mean().sort_values(by='Survived',ascending=False)
+
+#g = sns.FacetGrid(train,col='Survived')
+#g.map(plt.hist,'Age',bins=20)
+#g.savefig('test.png',format='png')
+
+#grid = sns.FacetGrid(train, col='Survived', row='Pclass',size=2.2,aspect=1.6)
+#grid.map(plt.hist,'Age',alpha = .5, bins=20)
+#grid.add_legend()
+#grid.savefig('pclass.png',format='png')
+
+#grid = sns.FacetGrid(train, row='Embarked', size=2.2, aspect=1.6)
+#grid.map(sns.pointplot, 'Pclass', 'Survived', 'Sex', palette='deep')
+#grid.add_legend()
+#grid.savefig('embarked.png',format='png')
+
+#grid = sns.FacetGrid(train,row='Embarked',col='Survived',size=2.2,aspect=1.6)
+#grid.map(sns.barplot, 'Sex', 'Fare', alpha=.5, ci=None)
+#grid.add_legend()
+#grid.savefig('embarked2.png',format='png')
+
+print "Before", train.shape, test.shape, combine[0].shape, combine[1].shape
+# drop only the ticket number, and keep cabin info 
+train.Cabin = train.Cabin.fillna('N')
+train.Cabin = train.Cabin.apply(lambda x: x[0])
+test.Cabin = test.Cabin.fillna('N')
+test.Cabin = test.Cabin.apply(lambda x: x[0])
+
+train = train.drop(['Ticket'],axis=1)
+test = test.drop(['Ticket'],axis=1)
+combine = [train,test]
+
+print "After", train.shape, test.shape, combine[0].shape, combine[1].shape
+df_combined = pd.concat([train['Cabin'], test['Cabin']])
+le = preprocessing.LabelEncoder()
+le = le.fit(df_combined['Cabin'])
+train['Cabin'] = le.transform(train['Cabin'])
+test['Cabin'] = le.transform(test['Cabin'])
+
+for dataset in combine:
+    dataset['Title'] = dataset.Name.str.extract(' ([A-Za-z]+)\.', expand=False)
+print pd.crosstab(train['Title'], train['Sex'])
+
+for dataset in combine:
+    dataset['Title'] = dataset['Title'].replace(['Lady', 'Countess','Capt', 'Col',\
+            'Don', 'Dr', 'Major', 'Rev', 'Sir', 'Jonkheer', 'Dona'], 'Rare')
+    dataset['Title'] = dataset['Title'].replace('Mlle', 'Miss')
+    dataset['Title'] = dataset['Title'].replace('Ms', 'Miss')
+    dataset['Title'] = dataset['Title'].replace('Mme', 'Mrs')
+print train[['Title', 'Survived']].groupby(['Title'], as_index=False).mean()
+
+title_mapping = {"Mr": 1, "Miss": 2, "Mrs": 3, "Master": 4, "Rare": 5}
+for dataset in combine:
+    dataset['Title'] = dataset['Title'].map(title_mapping)
+    dataset['Title'] = dataset['Title'].fillna(0)
+print train.head()
+
+train = train.drop(['Name', 'PassengerId'], axis=1)
+test = test.drop(['Name'], axis=1)
+combine = [train, test]
+print train.shape, test.shape
+
+for dataset in combine:
+    dataset['Sex'] = dataset['Sex'].map({'female':1, 'male':0}).astype(int)
+
+#grid = sns.FacetGrid(train, row='Pclass', col='Sex', size=2.2, aspect=1.6)
+#grid.map(plt.hist, 'Age', alpha=.5, bins=20)
+#grid.add_legend()
+#grid.savefig('pclass.png',format='png')
+
+guess_ages = np.zeros((2,3))
+for dataset in combine:
+    for i in range(0,2):
+        for j in range(0,3):
+            guess = dataset[(dataset['Sex']==i) &\
+                    (dataset['Pclass'] == j+1)]['Age'].dropna()
+            age_guess = guess.median()
+            guess_ages[i,j] = int(age_guess/0.5+0.5)*0.5
+    for i in range(0,2):
+        for j in range(0,3):
+            dataset.loc[ (dataset.Age.isnull()) & (dataset.Sex == i) & (dataset.Pclass == j+1),\
+                    'Age'] = guess_ages[i,j]
+    dataset['Age'] = dataset['Age'].astype(int)
+
+train['AgeBand'] = pd.cut(train['Age'],8)
+print train[['AgeBand', 'Survived']].groupby(['AgeBand'],as_index=False).mean().sort_values(by='AgeBand',ascending=True)
+
+for dataset in combine:
+    dataset.loc[dataset['Age'] <= 10, 'Age'] = 0
+    dataset.loc[(dataset['Age'] > 10) & (dataset['Age'] <= 20), 'Age'] = 1
+    dataset.loc[(dataset['Age'] > 20) & (dataset['Age'] <= 30), 'Age'] = 2
+    dataset.loc[(dataset['Age'] > 30) & (dataset['Age'] <= 40), 'Age'] = 3
+    dataset.loc[(dataset['Age'] > 40) & (dataset['Age'] <= 50), 'Age'] = 4
+    dataset.loc[(dataset['Age'] > 50) & (dataset['Age'] <= 60), 'Age'] = 5
+    dataset.loc[(dataset['Age'] > 60) & (dataset['Age'] <= 70), 'Age'] = 6
+    dataset.loc[dataset['Age'] > 70, 'Age'] = 7
+
+train = train.drop(['AgeBand'], axis=1)
+combine = [train,test]
+# Not combining family info as IsAlone actually improves the performance by a few percent #
+#for dataset in combine:
+#    dataset['FamilySize'] = dataset['SibSp'] + dataset['Parch']+1
+#print train[['FamilySize', 'Survived']].groupby(['FamilySize'], as_index=False).mean().sort_values(by='Survived', ascending=False)
+
+#for dataset in combine:
+#    dataset['IsAlone'] = 0
+#    dataset.loc[dataset['FamilySize'] ==1, 'IsAlone'] = 1
+#print train[['IsAlone', 'Survived']].groupby(['IsAlone'], as_index=False).mean()
+
+#train = train.drop(['Parch', 'SibSp', 'FamilySize'], axis=1)
+#test = test.drop(['Parch', 'SibSp', 'FamilySize'], axis=1)
+#combine = [train, test]
+
+# if age and class are included in the data, their combination should not be included. No?
+#for dataset in combine:
+#    dataset['Age*Class'] = dataset.Age * dataset.Pclass
+
+freq_port = train.Embarked.dropna().mode()[0]
+for dataset in combine:
+    dataset['Embarked'] = dataset['Embarked'].fillna(freq_port)
+print train[['Embarked', 'Survived']].groupby(['Embarked'], as_index = False).mean().sort_values(by='Survived', ascending=False)
+
+for dataset in combine:
+    dataset['Embarked'] = dataset['Embarked'].map( {'S': 0, 'C': 1, 'Q': 2} ).astype(int)
+
+# original code #
+# test['Fare'].fillna(test['Fare'].dropna().median(), inplace=True)
+
+# fill the fare with the median value of the corresponding Pclass #
+# does this introduced two correlated values ? #
+# would adding another variable into play help ? #
+guess_fare = np.zeros(3)
+for dataset in combine:
+    for i in range(1,4):
+        guess = dataset[(dataset['Pclass']==i)]['Fare'].dropna()
+        guess_fare[i-1] = guess.median()
+    for i in range(1,4):
+        dataset.loc[ (dataset.Fare.isnull()) & (dataset.Pclass == i),'Fare'] = guess_fare[i-1]
+
+train['FareBand'] = pd.qcut(train['Fare'],8)
+print train[['FareBand', 'Survived']].groupby(['FareBand'],as_index=False).mean().sort_values(by='FareBand', ascending=True)
+
+for dataset in combine:
+    dataset.loc[ dataset['Fare'] <= 7.75, 'Fare'] = 0
+    dataset.loc[(dataset['Fare'] > 7.75) & (dataset['Fare'] <= 7.91), 'Fare'] = 1
+    dataset.loc[(dataset['Fare'] > 7.91) & (dataset['Fare'] <= 9.841), 'Fare'] = 2
+    dataset.loc[(dataset['Fare'] > 9.841) & (dataset['Fare'] <= 14.454), 'Fare'] = 3
+    dataset.loc[(dataset['Fare'] > 14.454) & (dataset['Fare'] <= 24.479), 'Fare']   = 4
+    dataset.loc[(dataset['Fare'] > 24.479) & (dataset['Fare'] <= 31.0), 'Fare']   = 5
+    dataset.loc[(dataset['Fare'] > 31.0) & (dataset['Fare'] <= 69.488), 'Fare']   = 6
+    dataset.loc[ dataset['Fare'] > 69.488, 'Fare'] = 7
+    dataset['Fare'] = dataset['Fare'].astype(int)
+train = train.drop(['FareBand'], axis=1)
+combine = [train, test]
+
+#from scipy.stats.stats import pearsonr   
+#print "Fare - Class CORRELATION"
+#print pearsonr(train['Fare'],train['Pclass'])
+#only -0.63 corr#
+#print "Age - Class CORRELATION"
+#print pearsonr(train['Age'],train['Pclass'])
+
+X_train = train.drop('Survived', axis=1)
+Y_train = train['Survived']
+X_test = test.drop('PassengerId',axis=1).copy()
+# Perform principal component analysis to reduce dimensionality, estimate the variance per component and transform data #
+# number of components not fixed (mle), the algorithm decides how many components are necessary #
+pca = PCA(n_components ='mle',svd_solver = 'full')
+#pca = PCA(n_components =7,svd_solver = 'full')
+# need to figure out how to transform the test data the same way as the PC determined from the training example and use those new features to run the regression algorithms #
+pca.fit(X_train, Y_train)
+print 'PCA number of components'
+print pca.n_components_
+print 'PCA components'
+print pca.components_
+print 'PCA contributions from selected components'
+print pca.explained_variance_ratio_
+print 'PCA singular values'
+print pca.singular_values_
+X_train = pca.transform(X_train)
+# from the model evaluation, after PCA transform, the accuracy increases in Stochastic Gradient Decent, SVC, identical for Random Forest and Decision Tree while decreased in linear SVC, Perceptron, Naive Bayes, KNN. Overall the imporvement is not significant # 
+# PCA is quite useful in improving Stochastic Gradient Decent, but not so significant in others, especially the best algorithms here are not affected much by PCA #
+
+X_test = pca.transform(X_test)
+
+logreg = LogisticRegression()
+logreg.fit(X_train,Y_train)
+Y_pred = logreg.predict(X_test)
+acc_log = round(logreg.score(X_train, Y_train) *100,2)
+print acc_log
+
+coeff = pd.DataFrame(train.columns.delete(0))
+coeff.columns = ['Feature']
+coeff["Correlation"] = pd.Series(logreg.coef_[0])
+
+print coeff.sort_values(by='Correlation', ascending=False)
+
+
+svc = SVC()
+svc.fit(X_train, Y_train)
+#X_test = pca.transform(X_test)
+Y_pred = svc.predict(X_test)
+acc_svc = round(svc.score(X_train,Y_train)*100,2)
+print acc_svc
+
+knn = KNeighborsClassifier(n_neighbors = 3)
+knn.fit(X_train, Y_train)
+Y_pred = knn.predict(X_test)
+acc_knn = round(knn.score(X_train, Y_train) * 100, 2)
+print acc_knn
+
+gaussian = GaussianNB()
+gaussian.fit(X_train, Y_train)
+Y_pred = gaussian.predict(X_test)
+acc_gaussian = round(gaussian.score(X_train, Y_train) * 100, 2)
+print acc_gaussian
+
+perceptron = Perceptron()
+perceptron.fit(X_train, Y_train)
+Y_pred = perceptron.predict(X_test)
+acc_perceptron = round(perceptron.score(X_train, Y_train) * 100, 2)
+print acc_perceptron
+
+linear_svc = LinearSVC()
+linear_svc.fit(X_train, Y_train)
+Y_pred = linear_svc.predict(X_test)
+acc_linear_svc = round(linear_svc.score(X_train, Y_train) * 100, 2)
+print acc_linear_svc
+
+sgd = SGDClassifier()
+sgd.fit(X_train, Y_train)
+Y_pred = sgd.predict(X_test)
+acc_sgd = round(sgd.score(X_train, Y_train) * 100, 2)
+print acc_sgd
+
+decision_tree = DecisionTreeClassifier()
+decision_tree.fit(X_train, Y_train)
+Y_pred = decision_tree.predict(X_test)
+acc_decision_tree = round(decision_tree.score(X_train, Y_train) * 100, 2)
+print acc_decision_tree
+
+
+random_forest = RandomForestClassifier(n_estimators=100)
+random_forest.fit(X_train, Y_train)
+Y_pred = random_forest.predict(X_test)
+random_forest.score(X_train, Y_train)
+acc_random_forest = round(random_forest.score(X_train, Y_train) * 100, 2)
+print acc_random_forest
+
+submission = pd.DataFrame({
+            "PassengerId": test["PassengerId"],
+                    "Survived": Y_pred
+                        })
+submission.to_csv('submission.csv', index=False)
+
+models = pd.DataFrame({'Model': ['Support Vector Machines', 'KNN', 'Logistic Regression', 'Random Forest', 'Naive Bayes', 'Perceptron', 'Stochastic Gradient Decent', 'Linear SVC', 'Decision Tree'],'Score': [acc_svc, acc_knn, acc_log, acc_random_forest, acc_gaussian, acc_perceptron, acc_sgd, acc_linear_svc, acc_decision_tree]})
+print models.sort_values(by='Score', ascending=False)
